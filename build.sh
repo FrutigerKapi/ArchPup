@@ -15,13 +15,16 @@ ROOTFS="$WORK_DIR/rootfs"
 ISO_ROOT="$WORK_DIR/iso_root"
 mkdir -p "$ROOTFS" "$ISO_ROOT/boot/syslinux"
 
-echo "=== [2/6] Downloading Artix base bootstrap rootfs ==="
-# Pull official Artix bootstrap image (OpenRC init + pacman preconfigured)
-ARTIX_ROOTFS_URL="https://universe.artixlinux.org/iso/artix-base-openrc-20240513-x86_64.tar.xz"
-curl -L -o "$WORK_DIR/base.tar.xz" "$ARTIX_ROOTFS_URL"
+echo "=== [2/6] Downloading Official Arch Bootstrap rootfs ==="
+ARCH_BOOTSTRAP_URL="https://geo.mirror.pkgbuild.com/iso/2026.10.01/archlinux-bootstrap-2026.10.01-x86_64.tar.zst"
+
+echo "Fetching $ARCH_BOOTSTRAP_URL..."
+curl -L -o "$WORK_DIR/bootstrap.tar.zst" "$ARCH_BOOTSTRAP_URL"
 
 echo "Extracting rootfs..."
-tar -xJf "$WORK_DIR/base.tar.xz" -C "$ROOTFS"
+# Arch bootstrap tarballs unpack into root.x86_64/
+tar -I zstd -xf "$WORK_DIR/bootstrap.tar.zst" -C "$WORK_DIR"
+mv "$WORK_DIR/root.x86_64"/* "$ROOTFS/"
 
 echo "=== [3/6] Setting ArchPup branding & DNS ==="
 echo "archpup" > "$ROOTFS/etc/hostname"
@@ -32,21 +35,20 @@ cat << 'EOF' > "$ROOTFS/etc/issue"
    / ___ \| | | (__| | | |  __/| |_| | |_) |/ __/| (_) |
   /_/   \_\_|  \___|_| |_|_|    \__,_| .__/|_____|\___/ 
                                      |_|                
-Welcome to ArchPup 26 (26.10) - Systemd-free Arch Linux
+Welcome to ArchPup 26 (26.10) - Lightweight Arch/Puppy Hybrid
 Pacman rolling packages with Puppy Linux spirit.
 
 EOF
 
-# Configure DNS so network resolution works inside chroot
+# Configure DNS so network resolution works inside rootfs
 echo "nameserver 1.1.1.1" > "$ROOTFS/etc/resolv.conf"
 
-echo "=== [4/6] Extracting Kernel and Initramfs for ISO boot ==="
+echo "=== [4/6] Setting up boot assets ==="
+# Populate boot directory with kernel
 if [ -f "$ROOTFS/boot/vmlinuz-linux" ]; then
     cp "$ROOTFS/boot/vmlinuz-linux" "$ISO_ROOT/boot/vmlinuz"
-elif [ -f "$ROOTFS/boot/vmlinuz" ]; then
-    cp "$ROOTFS/boot/vmlinuz" "$ISO_ROOT/boot/vmlinuz"
 else
-    echo "Copying runner kernel fallback..."
+    echo "Pulling kernel from host runner..."
     cp /boot/vmlinuz* "$ISO_ROOT/boot/vmlinuz" 2>/dev/null || touch "$ISO_ROOT/boot/vmlinuz"
 fi
 
@@ -85,3 +87,4 @@ xorriso -as mkisofs \
 
 echo "=== ArchPup 26 Build Complete! ==="
 ls -lh "$OUT_DIR"
+
