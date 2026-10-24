@@ -48,9 +48,10 @@ touch "$ISO_ROOT/boot/initrd.gz"
 echo "=== [5/5] Building bootable ISO with xorriso ==="
 xorriso -as mkisofs \
   -iso-level 3 \
-  -full-iso-9660-filenames \
+  -R -J -l \
   -volid "ARCHPUP_${VERSION}" \
   -output "$OUT_DIR/${DISTRO}-${VERSION}-${ARCH}.iso" \
   "$ISO_ROOT"
 
 echo "=== Build finished! Created: $OUT_DIR/${DISTRO}-${VERSION}-${ARCH}.iso ==="
+
