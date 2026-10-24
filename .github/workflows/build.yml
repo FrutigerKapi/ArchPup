@@ -1,1 +1,42 @@
+name: Build ArchPup ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+
+jobs:
+  build-iso:
+    name: Build ArchPup 26 (x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Maximize Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
+          sudo apt-get clean
+
+      - name: Install ISO & SquashFS Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y squashfs-tools xorriso isolinux syslinux-utils mtools dosfstools zstd curl
+
+      - name: Make Build Script Executable
+        run: chmod +x build.sh
+
+      - name: Run Build Script
+        run: sudo ./build.sh
+
+      - name: Upload ISO Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArchPup-26-x86_64-ISO
+          path: out/*.iso
+          retention-days: 7
 
