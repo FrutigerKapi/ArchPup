@@ -1,5 +1,3 @@
-#!/usr/bin/env bash
-set -euo pipefail
 
 echo "=========================================="
 echo "   Building Bootable ArchPup 26 (x86_64) "
