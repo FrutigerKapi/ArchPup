@@ -48,7 +48,6 @@ pacman-key --init
 pacman-key --populate archlinux
 pacman -Sy --noconfirm --needed \
     linux \
-    syslinux \
     busybox \
     xorg-server \
     xorg-xinit \
@@ -57,16 +56,21 @@ pacman -Sy --noconfirm --needed \
     jwm \
     xterm \
     feh \
-    leafpad
+    geany
 pacman -Scc --noconfirm
 "
 
 # Copy kernel out of rootfs
 cp "${ROOTFS_DIR}/boot/vmlinuz-linux" "${ISO_DIR}/boot/vmlinuz"
 
-# Copy isolinux binaries
-cp "${ROOTFS_DIR}/usr/lib/syslinux/bios/isolinux.bin" "${ISO_DIR}/boot/syslinux/" || cp /usr/lib/syslinux/bios/isolinux.bin "${ISO_DIR}/boot/syslinux/" 2>/dev/null || cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/boot/syslinux/"
-cp "${ROOTFS_DIR}/usr/lib/syslinux/bios/ldlinux.c32" "${ISO_DIR}/boot/syslinux/" || cp /usr/lib/syslinux/bios/ldlinux.c32 "${ISO_DIR}/boot/syslinux/" 2>/dev/null || cp /usr/lib/syslinux/modules/bios/ldlinux.c32 "${ISO_DIR}/boot/syslinux/"
+# Copy isolinux binaries from host or rootfs
+if [ -f /usr/lib/ISOLINUX/isolinux.bin ]; then
+    cp /usr/lib/ISOLINUX/isolinux.bin "${ISO_DIR}/boot/syslinux/"
+    cp /usr/lib/syslinux/modules/bios/ldlinux.c32 "${ISO_DIR}/boot/syslinux/" 2>/dev/null || cp /usr/lib/syslinux/bios/ldlinux.c32 "${ISO_DIR}/boot/syslinux/"
+else
+    find "${ROOTFS_DIR}" /usr -name "isolinux.bin" -exec cp {} "${ISO_DIR}/boot/syslinux/" \; -quit
+    find "${ROOTFS_DIR}" /usr -name "ldlinux.c32" -exec cp {} "${ISO_DIR}/boot/syslinux/" \; -quit
+fi
 
 echo "=== [5/7] Setting up Desktop Autologin & JWM ==="
 # Auto-start X11 on login
@@ -86,7 +90,7 @@ cat << 'EOF' > "${ROOTFS_DIR}/root/.jwmrc"
 <JWM>
     <RootMenu label="Menu" height="24">
         <Program label="Terminal">xterm</Program>
-        <Program label="Text Editor">leafpad</Program>
+        <Program label="Text Editor">geany</Program>
         <Separator/>
         <Restart label="Restart JWM"/>
         <Exit label="Exit to Prompt" confirm="true"/>
@@ -136,7 +140,7 @@ ExecStart=
 ExecStart=-/sbin/agetty -o '-p -f -- \\u' --noclear --autologin root %I $TERM
 EOF
 
-# Strip caches before squashing
+# Clean package cache
 rm -rf "${ROOTFS_DIR}/var/cache/pacman/pkg/"*
 rm -rf "${ROOTFS_DIR}/tmp/"*
 
