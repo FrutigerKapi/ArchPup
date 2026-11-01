@@ -28,3 +28,4 @@ Builds run directly in the cloud on GitHub Actions with zero local setup:
 
 - Puppy Linux community & tools
 - Arch Linux & Artix Linux packaging ecosystems
+- FrutigerKapi (The main developer)
