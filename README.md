@@ -12,7 +12,7 @@ A modern continuation of ArchPup. Bringing together the lightning speed, frugal 
 
 ## Versioning
 
-- **Current Release:** 26 (v26.10)
+- **Current Release:** Beta 1 (B26.1.0)
 - **Status:** Active development & CI testing
 
 ## Automated Cloud Builds
