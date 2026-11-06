@@ -323,7 +323,7 @@ chmod +x "${ROOTFS}/usr/local/bin/puppy-theme-settings"
 cat << 'EOF' > "${ROOTFS}/usr/local/bin/puppy-dock-manager"
 #!/usr/bin/env bash
 CONF="/root/.config/archpup-dock.conf"
-TRAY_XML="/root/.jwmrc-tray"
+JWMRC="/root/.jwmrc"
 
 mkdir -p /root/.config
 if [ ! -f "$CONF" ]; then
@@ -347,12 +347,33 @@ update_dock() {
     fi
   done < "$CONF"
 
-  cat << JWM_EOF > "$TRAY_XML"
+  cat << JWM_EOF > "$JWMRC"
+<?xml version="1.0"?>
 <JWM>
+  <RootMenu label="Puppy" height="26">
+    <Program label="Puppy App Store (Quickpet)">/usr/local/bin/quickpet</Program>
+    <Program label="Web Browser (Firefox)">firefox</Program>
+    <Program label="Simple Network Setup (Wi-Fi)">/usr/local/bin/sns</Program>
+    <Program label="Puppy Control Center (Settings)">/usr/local/bin/puppy-settings</Program>
+    <Program label="Theme &amp; Glass Settings">/usr/local/bin/puppy-theme-settings</Program>
+    <Program label="Dock &amp; Pinned Apps Manager">/usr/local/bin/puppy-dock-manager</Program>
+    <Program label="File Manager (PCManFM)">pcmanfm</Program>
+    <Program label="Terminal (xterm)">xterm</Program>
+    <Program label="Geany Text Editor">geany</Program>
+    <Program label="LibreOffice (PPT / Docs)">libreoffice</Program>
+    <Program label="GParted Disk Tool">gparted</Program>
+    <Program label="FrugalPup Installer">/usr/local/bin/frugalpup</Program>
+    <Program label="First Run Setup (QuickSetup)">/usr/local/bin/quicksetup --force</Program>
+    <Program label="Save Session (save2flash)">/usr/local/bin/save2flash</Program>
+    <Separator/>
+    <Restart label="Restart JWM"/>
+    <Exit label="Exit to Terminal" confirm="true"/>
+  </RootMenu>
+
   <Tray x="0" y="-1" autohide="off" height="34">
     <TrayButton label="  Puppy  ">root:1</TrayButton>
     <Spacer width="4"/>
-$(echo -e "$BUTTONS")    <Spacer width="2"/>
+$(echo -e -n "$BUTTONS")    <Spacer width="2"/>
     <TrayButton label=" ⚙ Dock ">exec:/usr/local/bin/puppy-dock-manager</TrayButton>
     <Spacer width="6"/>
     <TaskList maxwidth="200"/>
@@ -381,6 +402,24 @@ $(echo -e "$BUTTONS")    <Spacer width="2"/>
       <Foreground>#94a3b8</Foreground>
     </Inactive>
   </TaskListStyle>
+
+  <WindowStyle>
+    <Font>sans-serif-10:bold</Font>
+    <Width>2</Width>
+    <Height>24</Height>
+    <Active>
+      <Text>#ffffff</Text>
+      <Title>#253a4c:#15222d</Title>
+      <Corner>#38bdf8</Corner>
+      <Outline>#0284c7</Outline>
+    </Active>
+    <Inactive>
+      <Text>#94a3b8</Text>
+      <Title>#141b22:#0c1116</Title>
+      <Corner>#475569</Corner>
+      <Outline>#1e293b</Outline>
+    </Inactive>
+  </WindowStyle>
 </JWM>
 JWM_EOF
 
@@ -728,7 +767,8 @@ opacity-rule = [
 ];
 EOF
 
-# Pre-generate default Frutiger Aero JWM tray and dock configuration
+# Pre-generate default Frutiger Aero dock list
+mkdir -p "${ROOTFS}/root/.config"
 cat << 'EOF' > "${ROOTFS}/root/.config/archpup-dock.conf"
 TRUE|AppStore|/usr/local/bin/quickpet
 TRUE|Browser|firefox
@@ -739,8 +779,54 @@ TRUE|Terminal|xterm
 TRUE|Save|/usr/local/bin/save2flash
 EOF
 
-cat << 'EOF' > "${ROOTFS}/root/.jwmrc-tray"
+# Set up Frutiger Aero Wallpaper
+mkdir -p "${ROOTFS}/usr/share/backgrounds"
+if [ -f "wallpaper.jpg" ]; then
+  cp "wallpaper.jpg" "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg"
+elif [ -f "wp11964556-puppy-linux-wallpapers.jpg" ]; then
+  cp "wp11964556-puppy-linux-wallpapers.jpg" "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg"
+elif curl -fsSL --retry 2 "https://raw.githubusercontent.com/FrutigerKapi/ArchPup/main/wallpaper.jpg" -o "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg" 2>/dev/null; then
+  echo "Downloaded wallpaper from repo."
+fi
+
+# Clean X11 startup (picom disabled by default to prevent VM black screen)
+cat << 'EOF' > "${ROOTFS}/root/.xinitrc"
+#!/bin/sh
+xsetroot -solid "#112233" &
+if [ -f "/usr/share/backgrounds/archpup-wallpaper.jpg" ]; then
+  feh --bg-fill /usr/share/backgrounds/archpup-wallpaper.jpg &
+fi
+nm-applet &
+conky -c /root/.config/conky/conky.conf &
+/usr/local/bin/quicksetup &
+exec jwm
+EOF
+chmod +x "${ROOTFS}/root/.xinitrc"
+
+# JWM Configuration with Iced Glass Aesthetics & Standalone Dock
+cat << 'EOF' > "${ROOTFS}/root/.jwmrc"
+<?xml version="1.0"?>
 <JWM>
+  <RootMenu label="Puppy" height="26">
+    <Program label="Puppy App Store (Quickpet)">/usr/local/bin/quickpet</Program>
+    <Program label="Web Browser (Firefox)">firefox</Program>
+    <Program label="Simple Network Setup (Wi-Fi)">/usr/local/bin/sns</Program>
+    <Program label="Puppy Control Center (Settings)">/usr/local/bin/puppy-settings</Program>
+    <Program label="Theme &amp; Glass Settings">/usr/local/bin/puppy-theme-settings</Program>
+    <Program label="Dock &amp; Pinned Apps Manager">/usr/local/bin/puppy-dock-manager</Program>
+    <Program label="File Manager (PCManFM)">pcmanfm</Program>
+    <Program label="Terminal (xterm)">xterm</Program>
+    <Program label="Geany Text Editor">geany</Program>
+    <Program label="LibreOffice (PPT / Docs)">libreoffice</Program>
+    <Program label="GParted Disk Tool">gparted</Program>
+    <Program label="FrugalPup Installer">/usr/local/bin/frugalpup</Program>
+    <Program label="First Run Setup (QuickSetup)">/usr/local/bin/quicksetup --force</Program>
+    <Program label="Save Session (save2flash)">/usr/local/bin/save2flash</Program>
+    <Separator/>
+    <Restart label="Restart JWM"/>
+    <Exit label="Exit to Terminal" confirm="true"/>
+  </RootMenu>
+
   <Tray x="0" y="-1" autohide="off" height="34">
     <TrayButton label="  Puppy  ">root:1</TrayButton>
     <Spacer width="4"/>
@@ -780,59 +866,6 @@ cat << 'EOF' > "${ROOTFS}/root/.jwmrc-tray"
       <Foreground>#94a3b8</Foreground>
     </Inactive>
   </TaskListStyle>
-</JWM>
-EOF
-
-# Set up Frutiger Aero Wallpaper
-mkdir -p "${ROOTFS}/usr/share/backgrounds"
-if [ -f "wallpaper.jpg" ]; then
-  cp "wallpaper.jpg" "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg"
-elif [ -f "wp11964556-puppy-linux-wallpapers.jpg" ]; then
-  cp "wp11964556-puppy-linux-wallpapers.jpg" "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg"
-elif curl -fsSL --retry 2 "https://raw.githubusercontent.com/FrutigerKapi/ArchPup/main/wallpaper.jpg" -o "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg" 2>/dev/null; then
-  echo "Downloaded wallpaper from repo."
-fi
-
-cat << 'EOF' > "${ROOTFS}/root/.xinitrc"
-#!/bin/sh
-if [ -f "/usr/share/backgrounds/archpup-wallpaper.jpg" ]; then
-  feh --bg-fill /usr/share/backgrounds/archpup-wallpaper.jpg &
-else
-  xsetroot -solid "#112233" &
-fi
-picom -b --config /root/.config/picom/picom.conf &
-nm-applet &
-conky -c /root/.config/conky/conky.conf &
-/usr/local/bin/quicksetup &
-exec jwm
-EOF
-chmod +x "${ROOTFS}/root/.xinitrc"
-
-# JWM Configuration with Iced Glass Aesthetics & Dynamic Dock
-cat << 'EOF' > "${ROOTFS}/root/.jwmrc"
-<?xml version="1.0"?>
-<JWM>
-  <RootMenu label="Puppy" height="26">
-    <Program label="Puppy App Store (Quickpet)">/usr/local/bin/quickpet</Program>
-    <Program label="Web Browser (Firefox)">firefox</Program>
-    <Program label="Simple Network Setup (Wi-Fi)">/usr/local/bin/sns</Program>
-    <Program label="Puppy Control Center (Settings)">/usr/local/bin/puppy-settings</Program>
-    <Program label="Theme &amp; Glass Settings">/usr/local/bin/puppy-theme-settings</Program>
-    <Program label="Dock &amp; Pinned Apps Manager">/usr/local/bin/puppy-dock-manager</Program>
-    <Program label="File Manager (PCManFM)">pcmanfm</Program>
-    <Program label="Terminal (xterm)">xterm</Program>
-    <Program label="Geany Text Editor">geany</Program>
-    <Program label="LibreOffice (PPT / Docs)">libreoffice</Program>
-    <Program label="GParted Disk Tool">gparted</Program>
-    <Program label="FrugalPup Installer">/usr/local/bin/frugalpup</Program>
-    <Program label="First Run Setup (QuickSetup)">/usr/local/bin/quicksetup --force</Program>
-    <Program label="Save Session (save2flash)">/usr/local/bin/save2flash</Program>
-    <Separator/>
-    <Restart label="Restart JWM"/>
-    <Exit label="Exit to Terminal" confirm="true"/>
-  </RootMenu>
-
-  <Include>/root/.jwmrc-tray</Include>
 
   <WindowStyle>
     <Font>sans-serif-10:bold</Font>
