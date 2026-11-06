@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== Building ArchPup 26 (Live Puppy Edition) ==="
+echo "=== Building ArchPup 26.0.1 (Frutiger Aero Stable Edition) ==="
 WORK_DIR="/home/runner/archpup-build"
 ISO_DIR="${WORK_DIR}/iso"
 ROOTFS="${WORK_DIR}/rootfs"
@@ -63,6 +63,7 @@ pacman -S --noconfirm --needed \
   firefox \
   xterm \
   feh \
+  fastfetch \
   conky \
   yad \
   geany \
@@ -77,12 +78,91 @@ pacman -S --noconfirm --needed \
 
 systemctl enable NetworkManager
 
-# Configure live archiso hooks (clean live boot without memdisk error)
+# Configure live archiso hooks
 echo 'HOOKS=(base udev modconf archiso archiso_loop_mnt block filesystems)' > /etc/mkinitcpio.conf
 KVER=\$(ls /lib/modules | head -n1)
 mkinitcpio -k \"\${KVER}\" -c /etc/mkinitcpio.conf -g /boot/initramfs.img
 pacman -Scc --noconfirm
 "
+
+# Configure ArchPup 26.0.1 OS Identification (Replaces generic Arch Linux branding)
+cat << 'EOF' > "${ROOTFS}/etc/os-release"
+NAME="ArchPup"
+PRETTY_NAME="ArchPup 26.0.1"
+ID=archpup
+ID_LIKE=arch
+BUILD_ID=26.0.1
+VERSION="26.0.1 (Frutiger Aero Edition)"
+VERSION_ID="26.0.1"
+ANSI_COLOR="0;36"
+HOME_URL="https://github.com/FrutigerKapi/ArchPup"
+SUPPORT_URL="https://github.com/FrutigerKapi/ArchPup"
+BUG_REPORT_URL="https://github.com/FrutigerKapi/ArchPup/issues"
+LOGO=archpup
+EOF
+
+cp "${ROOTFS}/etc/os-release" "${ROOTFS}/usr/lib/os-release" 2>/dev/null || true
+
+cat << 'EOF' > "${ROOTFS}/etc/lsb-release"
+LSB_VERSION=26.0.1
+DISTRIB_ID=ArchPup
+DISTRIB_RELEASE=26.0.1
+DISTRIB_CODENAME=archpup
+DISTRIB_DESCRIPTION="ArchPup 26.0.1"
+EOF
+
+echo "ArchPup 26.0.1" > "${ROOTFS}/etc/arch-release"
+echo 'ArchPup 26.0.1 (\l)' > "${ROOTFS}/etc/issue"
+echo "ArchPup 26.0.1" > "${ROOTFS}/etc/issue.net"
+
+# Configure custom Fastfetch banner
+mkdir -p "${ROOTFS}/root/.config/fastfetch" "${ROOTFS}/etc/fastfetch"
+cat << 'EOF' > "${ROOTFS}/etc/archpup-ascii.txt"
+       .---.
+      (  O  )   .
+       `---'   /
+         \  .-'
+          \( > )
+           `--'
+       ArchPup 26.0.1
+EOF
+
+cat << 'EOF' > "${ROOTFS}/root/.config/fastfetch/config.jsonc"
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  "logo": {
+    "source": "/etc/archpup-ascii.txt",
+    "color": {
+      "1": "cyan",
+      "2": "light_blue"
+    }
+  },
+  "modules": [
+    "title",
+    "separator",
+    "os",
+    "host",
+    "kernel",
+    "uptime",
+    "packages",
+    "shell",
+    "wm",
+    "terminal",
+    "cpu",
+    "memory",
+    "break",
+    "colors"
+  ]
+}
+EOF
+cp "${ROOTFS}/root/.config/fastfetch/config.jsonc" "${ROOTFS}/etc/fastfetch/config.jsonc" 2>/dev/null || true
+
+cat << 'EOF' >> "${ROOTFS}/root/.bashrc"
+alias neofetch=fastfetch
+if [ -n "$DISPLAY" ] && [ -t 1 ]; then
+  fastfetch
+fi
+EOF
 
 # Copy kernel and initramfs to ISO
 cp "${ROOTFS}/boot/vmlinuz-linux" "${ISO_DIR}/boot/vmlinuz"
@@ -107,7 +187,6 @@ EOF
 # --- A. Simple Network Setup (SNS) ---
 cat << 'EOF' > "${ROOTFS}/usr/local/bin/sns"
 #!/usr/bin/env bash
-# Puppy Simple Network Setup (Wi-Fi & Wired)
 nmcli radio wifi on 2>/dev/null || true
 IFACES=$(nmcli device status 2>/dev/null | awk 'NR>1 {print $1, $2, $3}')
 
@@ -169,8 +248,6 @@ EOF
 # --- A2. Theme & Glass Effects Tool ---
 cat << 'EOF' > "${ROOTFS}/usr/local/bin/puppy-theme-settings"
 #!/usr/bin/env bash
-# Puppy Theme & Glass Effects Manager
-
 THEME_CHOICE=$(yad --form --title="Puppy Theme & Glass Settings" --window-icon="preferences-desktop-theme" \
   --width=480 --center \
   --text="<b>Customise ArchPup Appearance & Glass Effects</b>" \
@@ -238,17 +315,130 @@ pkill picom 2>/dev/null || true
 picom -b --config /root/.config/picom/picom.conf 2>/dev/null &
 
 which jwm >/dev/null 2>&1 && jwm -restart 2>/dev/null || true
-
 yad --info --title="Theme Applied" --text="Glassy theme applied successfully!" --timeout=2 --width=280 --center &
 EOF
 chmod +x "${ROOTFS}/usr/local/bin/puppy-theme-settings"
 
-cat << 'EOF' > "${ROOTFS}/usr/share/applications/puppy-theme-settings.desktop"
+# --- A3. Removable Pinned Apps Dock Manager ---
+cat << 'EOF' > "${ROOTFS}/usr/local/bin/puppy-dock-manager"
+#!/usr/bin/env bash
+CONF="/root/.config/archpup-dock.conf"
+TRAY_XML="/root/.jwmrc-tray"
+
+mkdir -p /root/.config
+if [ ! -f "$CONF" ]; then
+  cat << 'C_EOF' > "$CONF"
+TRUE|AppStore|/usr/local/bin/quickpet
+TRUE|Browser|firefox
+TRUE|WiFi|/usr/local/bin/sns
+TRUE|Settings|/usr/local/bin/puppy-settings
+TRUE|Files|pcmanfm
+TRUE|Terminal|xterm
+TRUE|Save|/usr/local/bin/save2flash
+C_EOF
+fi
+
+update_dock() {
+  local BUTTONS=""
+  while IFS='|' read -r ENABLED LABEL CMD; do
+    [ -z "$LABEL" ] && continue
+    if [ "$ENABLED" = "TRUE" ]; then
+      BUTTONS="${BUTTONS}    <TrayButton label=\" ${LABEL} \">exec:${CMD}</TrayButton>\n"
+    fi
+  done < "$CONF"
+
+  cat << JWM_EOF > "$TRAY_XML"
+<JWM>
+  <Tray x="0" y="-1" autohide="off" height="34">
+    <TrayButton label="  Puppy  ">root:1</TrayButton>
+    <Spacer width="4"/>
+$(echo -e "$BUTTONS")    <Spacer width="2"/>
+    <TrayButton label=" ⚙ Dock ">exec:/usr/local/bin/puppy-dock-manager</TrayButton>
+    <Spacer width="6"/>
+    <TaskList maxwidth="200"/>
+    <Dock/>
+    <Clock format="%H:%M"><Button mask="123">exec:xterm -e cal</Button></Clock>
+  </Tray>
+
+  <TrayStyle>
+    <Font>sans-serif-10:bold</Font>
+    <Background>#112338:#1e3c5a</Background>
+    <Foreground>#e0f2fe</Foreground>
+    <Active>
+      <Background>#0ea5e9:#0284c7</Background>
+      <Foreground>#ffffff</Foreground>
+    </Active>
+  </TrayStyle>
+
+  <TaskListStyle>
+    <Font>sans-serif-9:bold</Font>
+    <Active>
+      <Background>#38bdf8:#0284c7</Background>
+      <Foreground>#ffffff</Foreground>
+    </Active>
+    <Inactive>
+      <Background>#0f1c2c:#182e44</Background>
+      <Foreground>#94a3b8</Foreground>
+    </Inactive>
+  </TaskListStyle>
+</JWM>
+JWM_EOF
+
+  which jwm >/dev/null 2>&1 && jwm -restart 2>/dev/null || true
+}
+
+ITEMS=""
+while IFS='|' read -r ENABLED LABEL CMD; do
+  [ -z "$LABEL" ] && continue
+  ITEMS="$ITEMS \"$ENABLED\" \"$LABEL\" \"$CMD\""
+done < "$CONF"
+
+CHOICE=$(eval yad --list --checklist --title="Dock Manager - Pinned Apps" \
+  --window-icon="preferences-desktop" --width=520 --height=380 --center \
+  --text="<b>Check or uncheck apps to pin/unpin them from the dock:</b>" \
+  --column="Pinned:CHK" --column="App Name" --column="Command" $ITEMS \
+  --button="Add App:2" --button="Cancel:1" --button="Apply Dock:0")
+
+RET=$?
+
+if [ $RET -eq 0 ]; then
+  NEW_CONF=""
+  IFS=$'\n'
+  for ROW in $CHOICE; do
+    [ -z "$ROW" ] && continue
+    PIN=$(echo "$ROW" | awk -F'|' '{print $1}')
+    LBL=$(echo "$ROW" | awk -F'|' '{print $2}')
+    C_CMD=$(echo "$ROW" | awk -F'|' '{print $3}')
+    [ -z "$LBL" ] && continue
+    NEW_CONF="${NEW_CONF}${PIN}|${LBL}|${C_CMD}\n"
+  done
+  echo -e -n "$NEW_CONF" > "$CONF"
+  update_dock
+  yad --info --title="Dock Updated" --text="Dock pinned apps updated successfully!" --timeout=2 --width=280 --center &
+
+elif [ $RET -eq 2 ]; then
+  ADD_FORM=$(yad --form --title="Add Pinned App to Dock" --width=400 --center \
+    --field="App Name:" "" \
+    --field="Launch Command:" "")
+  if [ $? -eq 0 ] && [ -n "$ADD_FORM" ]; then
+    NAME=$(echo "$ADD_FORM" | cut -d'|' -f1)
+    COMMAND=$(echo "$ADD_FORM" | cut -d'|' -f2)
+    if [ -n "$NAME" ] && [ -n "$COMMAND" ]; then
+      echo "TRUE|$NAME|$COMMAND" >> "$CONF"
+      update_dock
+      yad --info --title="Added" --text="Added '$NAME' to dock!" --timeout=2 --width=250 --center &
+    fi
+  fi
+fi
+EOF
+chmod +x "${ROOTFS}/usr/local/bin/puppy-dock-manager"
+
+cat << 'EOF' > "${ROOTFS}/usr/share/applications/puppy-dock-manager.desktop"
 [Desktop Entry]
-Name=Theme & Glass Settings
-Comment=Customise window translucency, blur, and styling
-Exec=/usr/local/bin/puppy-theme-settings
-Icon=preferences-desktop-theme
+Name=Dock & Pinned Apps Manager
+Comment=Add or remove pinned application shortcuts on the dock
+Exec=/usr/local/bin/puppy-dock-manager
+Icon=preferences-desktop
 Terminal=false
 Type=Application
 Categories=Settings;DesktopSettings;
@@ -257,12 +447,11 @@ EOF
 # --- B. Puppy Control Center (Settings App) ---
 cat << 'EOF' > "${ROOTFS}/usr/local/bin/puppy-settings"
 #!/usr/bin/env bash
-# Puppy Control Center / Settings Manager
-
 CHOICE=$(yad --list --title="Puppy Control Center" --window-icon="preferences-system" \
-  --width=540 --height=420 --center \
+  --width=540 --height=440 --center \
   --column="Category" --column="Tool" --column="Description" --column="Command":HD \
   "Appearance" "Theme & Glass Effects" "Configure glassy window effects and opacity" "/usr/local/bin/puppy-theme-settings" \
+  "Appearance" "Dock & Pinned Apps" "Add or remove pinned icons from the bottom dock" "/usr/local/bin/puppy-dock-manager" \
   "Network" "Simple Network Setup (Wi-Fi)" "Configure wireless and wired network" "/usr/local/bin/sns" \
   "Network" "Network Connections (Advanced)" "Edit static IP, VPN, and DNS" "nm-connection-editor" \
   "Display" "Screen Resolution (Xrandr)" "Adjust monitor resolution and layout" "xrandr" \
@@ -282,17 +471,6 @@ fi
 EOF
 chmod +x "${ROOTFS}/usr/local/bin/puppy-settings"
 
-cat << 'EOF' > "${ROOTFS}/usr/share/applications/puppy-settings.desktop"
-[Desktop Entry]
-Name=Puppy Control Center
-Comment=Puppy Settings and System Management
-Exec=/usr/local/bin/puppy-settings
-Icon=preferences-system
-Terminal=false
-Type=Application
-Categories=Settings;System;
-EOF
-
 # --- C. First Run QuickSetup Wizard ---
 cat << 'EOF' > "${ROOTFS}/usr/local/bin/quicksetup"
 #!/usr/bin/env bash
@@ -303,7 +481,7 @@ fi
 
 ANS=$(yad --form --title="QuickSetup - First Run Settings" --window-icon="preferences-system" \
   --width=450 --center \
-  --text="<b>Welcome to ArchPup 26!</b>\nConfigure your basic regional and network settings:" \
+  --text="<b>Welcome to ArchPup 26.0.1!</b>\nConfigure your basic regional and network settings:" \
   --field="Hostname:" "archpup" \
   --field="Timezone:CB" "UTC!Europe/London!Europe/Amsterdam!America/New_York!America/Los_Angeles!Asia/Tokyo" \
   --field="Keyboard Layout:CB" "us!uk!de!fr!es" \
@@ -372,7 +550,7 @@ cat << 'EOF' > "${ROOTFS}/usr/local/bin/quickpet"
 #!/usr/bin/env bash
 while true; do
   CHOICE=$(yad --list --title="Puppy App Store (Quickpet)" --window-icon="system-software-install" \
-    --width=580 --height=400 --center \
+    --width=580 --height=420 --center \
     --text="Install popular software or manage Puppy Linux tools:" \
     --column="Category" --column="Software" --column="Package" --column="Description" \
     "Internet" "Firefox" "firefox" "Standard web browser" \
@@ -385,6 +563,7 @@ while true; do
     "System" "Htop" "htop" "Interactive system monitor" \
     "System" "Fastfetch" "fastfetch" "System summary and hardware info" \
     "Appearance" "Theme & Glass Settings" "puppy-theme-settings" "Translucency & theme settings" \
+    "Appearance" "Dock Manager" "puppy-dock-manager" "Pin/unpin apps on bottom dock" \
     "Puppy" "Simple Network Setup (Wi-Fi)" "sns" "Manage Wi-Fi and Ethernet" \
     "Puppy" "Control Center (Settings)" "puppy-settings" "Puppy system settings" \
     "Puppy" "Frugal Installer" "frugalpup" "Install ArchPup to USB or Hard Drive" \
@@ -407,6 +586,8 @@ while true; do
       /usr/local/bin/puppy-settings &
     elif [ "$PKG" = "puppy-theme-settings" ]; then
       /usr/local/bin/puppy-theme-settings &
+    elif [ "$PKG" = "puppy-dock-manager" ]; then
+      /usr/local/bin/puppy-dock-manager &
     elif [ -n "$PKG" ]; then
       xterm -title "Installing $PKG" -e "pacman -S --noconfirm --needed $PKG; echo 'Installation complete! Press Enter to exit'; read"
     fi
@@ -500,7 +681,7 @@ conky.text = [[
 ${color #38bdf8}${font Sans:size=28:bold}${time %H:%M}${font}${color}
 ${color #38bdf8}${font Sans:size=11:bold}${time %A %d %B %Y}${font}${color}
 ${color #64748b}${hr 1}${color}
-${color #94a3b8}OS:${color} ArchPup 26 (Live Puppy)
+${color #94a3b8}OS:${color} ArchPup 26.0.1
 ${color #94a3b8}Kernel:${color} $kernel
 ${color #94a3b8}RAM Usage:${color} $mem / $memmax
 ${color #94a3b8}CPU Usage:${color} $cpu%
@@ -510,6 +691,7 @@ ${color #38bdf8}Puppy Utilities:${color}
 * PetGet (.PET Installer)
 * Simple Network Setup (SNS)
 * Control Center (Settings)
+* Dock & Pinned Apps Manager
 * Theme & Glass Settings
 * FrugalPup (Live Installer)
 * save2flash (Save Session)
@@ -546,9 +728,78 @@ opacity-rule = [
 ];
 EOF
 
+# Pre-generate default Frutiger Aero JWM tray and dock configuration
+cat << 'EOF' > "${ROOTFS}/root/.config/archpup-dock.conf"
+TRUE|AppStore|/usr/local/bin/quickpet
+TRUE|Browser|firefox
+TRUE|WiFi|/usr/local/bin/sns
+TRUE|Settings|/usr/local/bin/puppy-settings
+TRUE|Files|pcmanfm
+TRUE|Terminal|xterm
+TRUE|Save|/usr/local/bin/save2flash
+EOF
+
+cat << 'EOF' > "${ROOTFS}/root/.jwmrc-tray"
+<JWM>
+  <Tray x="0" y="-1" autohide="off" height="34">
+    <TrayButton label="  Puppy  ">root:1</TrayButton>
+    <Spacer width="4"/>
+    <TrayButton label=" AppStore ">exec:/usr/local/bin/quickpet</TrayButton>
+    <TrayButton label=" Browser ">exec:firefox</TrayButton>
+    <TrayButton label=" WiFi ">exec:/usr/local/bin/sns</TrayButton>
+    <TrayButton label=" Settings ">exec:/usr/local/bin/puppy-settings</TrayButton>
+    <TrayButton label=" Files ">exec:pcmanfm</TrayButton>
+    <TrayButton label=" Terminal ">exec:xterm</TrayButton>
+    <TrayButton label=" Save ">exec:/usr/local/bin/save2flash</TrayButton>
+    <Spacer width="2"/>
+    <TrayButton label=" ⚙ Dock ">exec:/usr/local/bin/puppy-dock-manager</TrayButton>
+    <Spacer width="6"/>
+    <TaskList maxwidth="200"/>
+    <Dock/>
+    <Clock format="%H:%M"><Button mask="123">exec:xterm -e cal</Button></Clock>
+  </Tray>
+
+  <TrayStyle>
+    <Font>sans-serif-10:bold</Font>
+    <Background>#112338:#1e3c5a</Background>
+    <Foreground>#e0f2fe</Foreground>
+    <Active>
+      <Background>#0ea5e9:#0284c7</Background>
+      <Foreground>#ffffff</Foreground>
+    </Active>
+  </TrayStyle>
+
+  <TaskListStyle>
+    <Font>sans-serif-9:bold</Font>
+    <Active>
+      <Background>#38bdf8:#0284c7</Background>
+      <Foreground>#ffffff</Foreground>
+    </Active>
+    <Inactive>
+      <Background>#0f1c2c:#182e44</Background>
+      <Foreground>#94a3b8</Foreground>
+    </Inactive>
+  </TaskListStyle>
+</JWM>
+EOF
+
+# Set up Frutiger Aero Wallpaper
+mkdir -p "${ROOTFS}/usr/share/backgrounds"
+if [ -f "wallpaper.jpg" ]; then
+  cp "wallpaper.jpg" "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg"
+elif [ -f "wp11964556-puppy-linux-wallpapers.jpg" ]; then
+  cp "wp11964556-puppy-linux-wallpapers.jpg" "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg"
+elif curl -fsSL --retry 2 "https://raw.githubusercontent.com/FrutigerKapi/ArchPup/main/wallpaper.jpg" -o "${ROOTFS}/usr/share/backgrounds/archpup-wallpaper.jpg" 2>/dev/null; then
+  echo "Downloaded wallpaper from repo."
+fi
+
 cat << 'EOF' > "${ROOTFS}/root/.xinitrc"
 #!/bin/sh
-xsetroot -solid "#16202c" &
+if [ -f "/usr/share/backgrounds/archpup-wallpaper.jpg" ]; then
+  feh --bg-fill /usr/share/backgrounds/archpup-wallpaper.jpg &
+else
+  xsetroot -solid "#112233" &
+fi
 picom -b --config /root/.config/picom/picom.conf &
 nm-applet &
 conky -c /root/.config/conky/conky.conf &
@@ -557,7 +808,7 @@ exec jwm
 EOF
 chmod +x "${ROOTFS}/root/.xinitrc"
 
-# JWM Configuration with Iced Glass Aesthetics & Dock Shortcuts
+# JWM Configuration with Iced Glass Aesthetics & Dynamic Dock
 cat << 'EOF' > "${ROOTFS}/root/.jwmrc"
 <?xml version="1.0"?>
 <JWM>
@@ -567,6 +818,7 @@ cat << 'EOF' > "${ROOTFS}/root/.jwmrc"
     <Program label="Simple Network Setup (Wi-Fi)">/usr/local/bin/sns</Program>
     <Program label="Puppy Control Center (Settings)">/usr/local/bin/puppy-settings</Program>
     <Program label="Theme &amp; Glass Settings">/usr/local/bin/puppy-theme-settings</Program>
+    <Program label="Dock &amp; Pinned Apps Manager">/usr/local/bin/puppy-dock-manager</Program>
     <Program label="File Manager (PCManFM)">pcmanfm</Program>
     <Program label="Terminal (xterm)">xterm</Program>
     <Program label="Geany Text Editor">geany</Program>
@@ -580,31 +832,7 @@ cat << 'EOF' > "${ROOTFS}/root/.jwmrc"
     <Exit label="Exit to Terminal" confirm="true"/>
   </RootMenu>
 
-  <Tray x="0" y="-1" autohide="off" height="30">
-    <TrayButton label="  Puppy  ">root:1</TrayButton>
-    <Spacer width="4"/>
-    <TrayButton label=" AppStore ">exec:/usr/local/bin/quickpet</TrayButton>
-    <TrayButton label=" Browser ">exec:firefox</TrayButton>
-    <TrayButton label=" WiFi ">exec:/usr/local/bin/sns</TrayButton>
-    <TrayButton label=" Settings ">exec:/usr/local/bin/puppy-settings</TrayButton>
-    <TrayButton label=" Files ">exec:pcmanfm</TrayButton>
-    <TrayButton label=" Terminal ">exec:xterm</TrayButton>
-    <TrayButton label=" Save ">exec:/usr/local/bin/save2flash</TrayButton>
-    <Spacer width="6"/>
-    <TaskList maxwidth="200"/>
-    <Dock/>
-    <Clock format="%H:%M"><Button mask="123">exec:xterm -e cal</Button></Clock>
-  </Tray>
-
-  <TrayStyle>
-    <Font>sans-serif-10</Font>
-    <Background>#151e28</Background>
-    <Foreground>#ffffff</Foreground>
-    <Active>
-      <Background>#243344:#151e28</Background>
-      <Foreground>#38bdf8</Foreground>
-    </Active>
-  </TrayStyle>
+  <Include>/root/.jwmrc-tray</Include>
 
   <WindowStyle>
     <Font>sans-serif-10:bold</Font>
@@ -649,13 +877,13 @@ TIMEOUT 50
 PROMPT 1
 
 LABEL archpup
-  MENU LABEL ArchPup 26 (Live RAM Mode - Default)
+  MENU LABEL ArchPup 26.0.1 (Live RAM Mode - Default)
   KERNEL /boot/vmlinuz
   INITRD /boot/initramfs.img
   APPEND archisobasedir=arch archisolabel=ARCHPUP_26 quiet
 
 LABEL archpup_persist
-  MENU LABEL ArchPup 26 (Persistent Mode - Requires ARCHPUP_SAVE disk)
+  MENU LABEL ArchPup 26.0.1 (Persistent Mode - Requires ARCHPUP_SAVE disk)
   KERNEL /boot/vmlinuz
   INITRD /boot/initramfs.img
   APPEND archisobasedir=arch archisolabel=ARCHPUP_26 cow_label=ARCHPUP_SAVE quiet
@@ -665,8 +893,8 @@ xorriso -as mkisofs -iso-level 3 -R -J -l \
   -volid "ARCHPUP_26" \
   -b isolinux/isolinux.bin -c isolinux/boot.cat \
   -no-emul-boot -boot-load-size 4 -boot-info-table \
-  -o "${OUT_DIR}/ArchPup-26-x86_64.iso" "${ISO_DIR}"
+  -o "${OUT_DIR}/ArchPup-26.0.1-x86_64.iso" "${ISO_DIR}"
 
-isohybrid "${OUT_DIR}/ArchPup-26-x86_64.iso" 2>/dev/null || true
+isohybrid "${OUT_DIR}/ArchPup-26.0.1-x86_64.iso" 2>/dev/null || true
 
-echo "=== Build Complete! ISO generated at ${OUT_DIR}/ArchPup-26-x86_64.iso ==="
+echo "=== Build Complete! ISO generated at ${OUT_DIR}/ArchPup-26.0.1-x86_64.iso ==="
