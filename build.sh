@@ -192,12 +192,14 @@ cat << 'EOF' > "${ROOTFS}/root/.config/fastfetch/config.jsonc"
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
-    "source": "/usr/share/pixmaps/archpup.png",
-    "type": "auto",
-    "width": 28,
-    "height": 14,
+    "type": "file",
+    "source": "/etc/archpup-ascii.txt",
+    "color": {
+      "1": "cyan",
+      "2": "light_blue"
+    },
     "padding": {
-      "top": 1,
+      "top": 0,
       "left": 1,
       "right": 2
     }
