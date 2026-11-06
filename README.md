@@ -1,5 +1,7 @@
 # ArchPup
 
+<img width="1320" height="1320" alt="archpup-logo" src="https://github.com/user-attachments/assets/1dd34d8e-83a5-4a04-b6ab-3d51d6acde83" />
+
 A modern continuation of ArchPup. Bringing together the lightning speed, frugal persistence, and lightweight footprint of Puppy Linux with the package ecosystem of Arch Linux.
 
 ## Highlights
