@@ -56,6 +56,7 @@ pacman -S --noconfirm --needed \
   xorg-xsetroot \
   xf86-video-vesa \
   xf86-video-fbdev \
+  xf86-video-vmware \
   xf86-input-libinput \
   jwm \
   picom \
@@ -792,13 +793,17 @@ fi
 # Clean X11 startup (picom disabled by default to prevent VM black screen)
 cat << 'EOF' > "${ROOTFS}/root/.xinitrc"
 #!/bin/sh
-xsetroot -solid "#112233" &
-if [ -f "/usr/share/backgrounds/archpup-wallpaper.jpg" ]; then
-  feh --bg-fill /usr/share/backgrounds/archpup-wallpaper.jpg &
+# Reliable baseline for physical PCs and virtual machines:
+# keep compositing and transparent widgets off during startup.
+xsetroot -solid "#b9e8f5"
+
+if [ -r "/usr/share/backgrounds/archpup-wallpaper.jpg" ]; then
+  feh --bg-fill /usr/share/backgrounds/archpup-wallpaper.jpg \
+    >/tmp/archpup-feh.log 2>&1 &
 fi
-nm-applet &
-conky -c /root/.config/conky/conky.conf &
-/usr/local/bin/quicksetup &
+
+nm-applet >/tmp/archpup-network.log 2>&1 &
+/usr/local/bin/quicksetup >/tmp/archpup-quicksetup.log 2>&1 &
 exec jwm
 EOF
 chmod +x "${ROOTFS}/root/.xinitrc"
@@ -931,3 +936,4 @@ xorriso -as mkisofs -iso-level 3 -R -J -l \
 isohybrid "${OUT_DIR}/ArchPup-26.0.1-x86_64.iso" 2>/dev/null || true
 
 echo "=== Build Complete! ISO generated at ${OUT_DIR}/ArchPup-26.0.1-x86_64.iso ==="
+
