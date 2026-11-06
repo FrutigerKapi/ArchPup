@@ -56,7 +56,7 @@ pacman -S --noconfirm --needed \
   xorg-xsetroot \
   xf86-video-vesa \
   xf86-video-fbdev \
-  xf86-video-vmware \
+  mesa \
   xf86-input-libinput \
   jwm \
   picom \
